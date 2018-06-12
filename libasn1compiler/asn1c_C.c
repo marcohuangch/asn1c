@@ -84,6 +84,8 @@ static int emit_type_DEF(arg_t *arg, asn1p_expr_t *expr, enum tvm_compat tv_mode
 } while(0)
 
 /* MKID_safe() without checking for reserved keywords */
+#define MKID_no_prefix(expr)  (asn1c_make_identifier(0, expr, 0))
+#define MKID_no_prefix_safe(expr) (asn1c_make_identifier(AMI_CHECK_RESERVED, expr, 0))
 #define	MKID(expr)	(asn1c_make_identifier(AMI_USE_PREFIX, expr, 0))
 #define	MKID_safe(expr)	(asn1c_make_identifier(AMI_CHECK_RESERVED | AMI_USE_PREFIX, expr, 0))
 
@@ -138,7 +140,7 @@ asn1c_lang_C_type_common_INTEGER(arg_t *arg) {
 			case A1TC_UNIVERVAL:
 				OUT("\t");
 				out_name_chain(arg, ONC_noflags);
-				OUT("_%s", MKID(v));
+				OUT("_%s", MKID_no_prefix(v));
 				OUT("\t= %" PRIdASN "%s\n",
 					v->value->value.v_integer,
 					(eidx+1 < el_count) ? "," : "");
@@ -272,7 +274,7 @@ asn1c_lang_C_type_BIT_STRING(arg_t *arg) {
 			eidx++;
 			OUT("\t");
 			out_name_chain(arg, ONC_noflags);
-			OUT("_%s", MKID(v));
+			OUT("_%s", MKID_no_prefix(v));
 			OUT("\t= %" PRIdASN "%s\n",
 				v->value->value.v_integer,
 				(eidx < el_count) ? "," : "");
@@ -316,7 +318,7 @@ asn1c_lang_C_type_SEQUENCE(arg_t *arg) {
 	OUT("} %s%s%s", (expr->marker.flags & EM_INDIRECT)?"*":"",
 		expr->_anonymous_type ? "" :
 			arg->embed
-				? MKID_safe(expr)
+				? MKID_no_prefix_safe(expr)
 				: MKID(expr),
 		arg->embed ? "" : "_t");
 
@@ -507,7 +509,7 @@ asn1c_lang_C_type_SET(arg_t *arg) {
 		INDENTED(
 			out_name_chain(arg, ONC_noflags);
 			OUT("_PR_");
-			id = MKID(v);
+			id = MKID_no_prefix(v);
 			OUT("%s,\t/* Member %s is present */\n",
 				id, id)
 		);
@@ -762,7 +764,7 @@ asn1c_lang_C_type_SEx_OF(arg_t *arg) {
 
 	PCTX_DEF;
 	OUT("} %s%s%s", (expr->marker.flags & EM_INDIRECT)?"*":"",
-		expr->_anonymous_type ? "" : MKID_safe(expr),
+		expr->_anonymous_type ? "" : arg->embed ? MKID_no_prefix_safe(expr) : MKID_safe(expr),
 		arg->embed ? "" : "_t");
 
 	/*
@@ -871,7 +873,7 @@ asn1c_lang_C_type_CHOICE(arg_t *arg) {
 				continue;
 			}
 			out_name_chain(arg, ONC_noflags);
-			id = MKID(v);
+			id = MKID_no_prefix(v);
 			OUT("_PR_%s", id);
 		}
 		OUT("\n");
@@ -906,7 +908,7 @@ asn1c_lang_C_type_CHOICE(arg_t *arg) {
 	OUT("} %s%s%s", (expr->marker.flags & EM_INDIRECT)?"*":"",
 		expr->_anonymous_type ? "" :
 			arg->embed
-				? MKID_safe(expr)
+				? MKID_no_prefix_safe(expr)
 				: MKID(expr),
 		arg->embed ? "" : "_t");
 
@@ -1104,7 +1106,7 @@ asn1c_lang_C_type_SIMPLE_TYPE(arg_t *arg) {
 		OUT("%s", asn1c_type_name(arg, arg->expr, tnfmt));
 		if(!expr->_anonymous_type) {
 			OUT("%s", (expr->marker.flags&EM_INDIRECT)?"\t*":"\t ");
-			OUT("%s", MKID_safe(expr));
+			OUT("%s", MKID_no_prefix_safe(expr));
 			if((expr->marker.flags & (EM_DEFAULT & ~EM_INDIRECT))
 					== (EM_DEFAULT & ~EM_INDIRECT))
 				OUT("\t/* DEFAULT %s */",
@@ -2278,11 +2280,11 @@ emit_member_table(arg_t *arg, asn1p_expr_t *expr) {
 		OUT("0,\n");
 	} else {
 		OUT("offsetof(struct ");
-			out_name_chain(arg, ONC_avoid_keywords);
+		out_name_chain(arg, ONC_avoid_keywords);
 		OUT(", ");
 		if(arg->expr->expr_type == ASN_CONSTR_CHOICE
 			&& (!UNNAMED_UNIONS)) OUT("choice.");
-		OUT("%s),\n", MKID_safe(expr));
+		OUT("%s),\n", MKID_no_prefix_safe(expr));
 	}
 	INDENT(+1);
 	if(C99_MODE) OUT(".tag = ");
@@ -2589,17 +2591,24 @@ out_name_chain(arg_t *arg, enum onc_flags onc_flags) {
 		tmparg.expr = expr->parent_expr;
 		if(0) tmparg.flags &= ~A1C_COMPOUND_NAMES;
 
+
 		out_name_chain(&tmparg, onc_flags);
 
 		OUT("__");	/* a separator between id components */
 
 		/* Fall through */
 	}
-
-	if(onc_flags & ONC_avoid_keywords)
-		id = MKID_safe(expr);
-	else
-		id = MKID(expr);
+	if(expr->parent_expr && expr->parent_expr->Identifier) {
+        if(onc_flags & ONC_avoid_keywords)
+            id = MKID_no_prefix_safe(expr);
+        else
+            id = MKID_no_prefix(expr);
+	} else {
+        if(onc_flags & ONC_avoid_keywords)
+            id = MKID_safe(expr);
+        else
+            id = MKID(expr);
+	}
 	OUT("%s", id);
 
 	return 0;
